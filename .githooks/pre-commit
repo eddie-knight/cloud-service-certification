@@ -1,0 +1,103 @@
+#!/c/Users/eknight/AppData/Local/Microsoft/WindowsApps/python
+
+#
+# This githook is only a requirement for modifying anchored github workflows:
+# Change the above line to YOUR `which python`
+# then run `git config core.hooksPath .githooks`
+#
+
+import subprocess
+
+import ruamel.yaml
+
+yaml = ruamel.yaml.YAML(typ='safe')
+anchors = ''
+
+
+def main():
+    ''' Search for any .yml workflows, parse them, then add any changed files to the current commit '''
+    cmd = subprocess.check_output(
+        ["ls", ".github/anchored-workflows/*.yml"],
+        stderr=subprocess.STDOUT).decode("utf-8") # Get all .anchored filenames
+    filepaths = cmd.splitlines()
+    with open(".github/anchors.yml", errors='ignore') as file:
+        global anchors
+        anchors = file.read()
+
+    for infile_path in filepaths:
+        parse(infile_path)
+
+def parse(infile_path):
+    ''' Parse anchored file, and if modified then stage the new file to be included in the current commit '''
+    outfile_path = infile_path.replace("anchored-workflows", "workflows")
+    parsed = parse_anchored_yaml(infile_path, outfile_path)
+    if parsed:
+        print(f"Parsed anchored workflow: {infile_path}->{outfile_path}")
+        subprocess.call(
+            ["git", "add", outfile_path, infile_path],
+            stderr=subprocess.STDOUT) # Stage file into the current commit
+
+
+def parse_anchored_yaml(infile_path, outfile_path):
+    ''' Parses any .anchored file into a valid Github Actions workflow '''
+    yaml_data = parse_workflow(infile_path)
+    if not yaml_data:
+        return False
+    if write_parsed_workflow(outfile_path, yaml_data):
+        return True
+
+
+def write_parsed_workflow(outfile_path, yaml_data):
+    ''' If workflow would be modified by changes to the .anchored file, write those changes now '''
+    try:
+        with open(outfile_path, "r") as file:
+            old_yaml = yaml.load(file)
+    except:
+        old_yaml = None
+
+    if old_yaml != yaml_data:
+        with open(outfile_path, "w") as file:
+            yaml.dump(yaml_data, file)
+        return True
+    return False
+
+def parse_workflow(infile):
+    ''' Parse the .anchored workflow with anchors, then restore it to it's previous state '''
+    anchored = add_anchors_to_infile(infile)
+    yaml_data = get_parsed_workflow(infile)
+
+    restore_anchored_file(infile, anchored)
+
+    if yaml_data:
+        return yaml_data
+    return None
+
+
+def add_anchors_to_infile(infile):
+    ''' Rewrite the .anchored file with our anchors appended to the top '''
+    with open(infile, "r", errors='ignore') as file:
+        anchored = file.read()
+    with open(infile, "w") as file:
+        file.write(f"{anchors}\n{anchored}")
+    return anchored
+
+
+def get_parsed_workflow(infile):
+    ''' Load the .anchored workflow into memory, automatically parsing all anchors '''
+    with open(infile, "r", errors='ignore') as file:
+        try:
+            yaml_data = yaml.load(file)
+            del yaml_data["anchors"] # Github Actions will fail if this is present
+            return yaml_data
+        except Exception as e:
+            print(f"Invalid YAML in {infile}:\n  {e}")
+            return None
+
+
+def restore_anchored_file(infile, anchored):
+    ''' Return the .anchored file to its previous state '''
+    with open(infile, "w", errors='ignore') as file:
+        file.seek(0)
+        file.write(anchored)
+
+main()

@@ -1,0 +1,70 @@
+name: Deploy Azure Kubernetes Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Name. Must not contain spaces, hyphens, or underscores.
+        required: true
+      demo_acr:
+        description: Name of the Azure Container Registry
+        required: true
+        default: citihubprod
+      demo_acr_rg:
+        description: Name of the Azure Container Registry resource group
+        required: true
+        default: citihubprod-aks-rg
+
+jobs:
+  configure:
+    name: AKS Deployment
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      TF_VAR_kube_config_filepath: ${{ github.workspace }}/kubeconfig
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+    steps:
+      - name: Clone Repository
+        uses: actions/checkout@v2
+
+      - name: TF Init Setup
+        run: *tf_init
+        working-directory: terraform/aks/setup
+        env:
+          TF_BACKEND_KEY: *setup_backend_key
+
+      - name: TF Init Configuration
+        run: *tf_init
+        working-directory: terraform/aks/configure
+        env:
+          TF_BACKEND_KEY: *configure_backend_key
+
+      - name: TF Apply Setup
+        working-directory: terraform/aks/setup
+        env:
+          TF_BACKEND_KEY: *setup_backend_key
+        run: |
+          terraform apply -auto-approve \
+            -var="environment=${{ github.event.inputs.environment }}" \
+            -var="demo_acr_rg=${{ github.event.inputs.demo_acr_rg }}" \
+            -var="demo_acr=${{ github.event.inputs.demo_acr }}"
+
+      - name: TF Apply Configuration
+        working-directory: terraform/aks/configure
+        env:
+          TF_BACKEND_KEY: *configure_backend_key
+        run: |
+          terraform apply -auto-approve \
+          -var="environment=${{ github.event.inputs.environment }}" \
+
+
+      - name: Store kubeconfig as artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: kubeconfig
+          path: ${{ env.TF_VAR_kube_config_filepath }}

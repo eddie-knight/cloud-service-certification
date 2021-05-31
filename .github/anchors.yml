@@ -1,0 +1,67 @@
+anchors:
+  # Not currently in use; example of how to handle terraform backends
+  tf_init: &tf_init |
+        terraform init -lock=false \
+        -backend-config="resource_group_name=terraform" \
+        -backend-config="key=${{ env.TF_BACKEND_KEY }}" \
+        -backend-config="access_key=${{ secrets.TF_BACKEND_ACCESS_KEY }}" \
+        -backend-config="storage_account_name=${{ secrets.TF_BACKEND_SA }}"
+  setup_backend_key: &setup_backend_key "githubdeployment.${{ github.event.inputs.environment }}.aks_setup.terraform.tfstate"
+  configure_backend_key: &configure_backend_key "githubdeployment.${{ github.event.inputs.environment }}.aks_configure.terraform.tfstate"
+
+  # Currently in use; terraform fmt->init->validate
+  validation_steps: &validation_steps
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Setup Terraform Environment
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: 0.14.5
+        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+    - name: Terraform Format
+      id: fmt
+      run: terraform fmt -check
+      continue-on-error: true
+
+    - name: Terraform Init
+      run: *tf_init
+      id: init
+      continue-on-error: true
+
+    - name: Terraform Validate
+      id: validate
+      if: github.event_name == 'pull_request'
+      run: terraform validate -no-color
+      continue-on-error: true
+
+    - name: Create PR comment if any check failed
+      uses: actions/github-script@0.9.0
+      if: github.event_name == 'pull_request' && (steps.fmt.outcome == 'failure' || steps.init.outcome == 'failure' || steps.validate.outcome == 'failure')
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const output = `### Result from failed workflow: ${{ github.workflow }}
+          #### Terraform Format and Style :pencil2: \`${{ steps.fmt.outcome }}\`
+
+          #### Terraform Initialization :gear:\`${{ steps.init.outcome }}\`
+
+          #### Terraform Validate :interrobang:\`${{ steps.validate.outcome }}\`
+          
+          *Pusher: @${{ github.actor }}, Action: ${{ github.event_name }}*`;
+            
+          github.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          })
+
+    - name: Exit based on status of fmt, init, and validate
+      if: steps.fmt.outcome == 'failure' || steps.init.outcome == 'failure' || steps.validate.outcome == 'failure'
+      run: |
+        echo Init: ${{ steps.init.outcome }}
+        echo Format: ${{ steps.fmt.outcome }}
+        echo Validate: ${{ steps.validate.outcome }}
+        exit 1

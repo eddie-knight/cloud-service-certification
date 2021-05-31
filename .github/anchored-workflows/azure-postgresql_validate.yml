@@ -1,0 +1,21 @@
+name: "Validate Azure PostgreSQL Setup Terraform"
+
+on:
+  pull_request:
+    paths:
+      - ".github/anchors.yml"
+      - ".github/workflows/azure-postgresql_validate.yml"
+      - "azure/postgresql/terraform/*"
+
+jobs:
+  validate:
+    name: "Validate Terraform"
+    runs-on: ubuntu-latest
+    env:
+      TF_BACKEND_KEY: githubdeployment.dev.aks_setup.terraform.tfstate
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: azure/postgresql/terraform
+    steps: *validation_steps

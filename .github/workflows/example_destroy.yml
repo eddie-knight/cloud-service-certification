@@ -1,0 +1,41 @@
+jobs:
+  configure:
+    defaults:
+      run: {shell: bash}
+    env: {ARM_CLIENT_ID: '${{ secrets.ARM_CLIENT_ID }}', ARM_CLIENT_SECRET: '${{ secrets.ARM_CLIENT_SECRET
+        }}', ARM_SUBSCRIPTION_ID: '${{ secrets.ARM_SUBSCRIPTION_ID }}', ARM_TENANT_ID: '${{
+        secrets.ARM_TENANT_ID }}', TF_VAR_kube_config_filepath: '${{ github.workspace
+        }}/kubeconfig'}
+    name: Destroy AKS Deployment
+    runs-on: ubuntu-latest
+    steps:
+    - {name: Clone Repository, uses: actions/checkout@v2}
+    - env: {TF_BACKEND_KEY: 'githubdeployment.${{ github.event.inputs.environment
+          }}.aks_setup.terraform.tfstate'}
+      name: TF Init Setup
+      run: "terraform init -lock=false \\\n-backend-config=\"resource_group_name=terraform\"\
+        \ \\\n-backend-config=\"key=${{ env.TF_BACKEND_KEY }}\" \\\n-backend-config=\"\
+        access_key=${{ secrets.TF_BACKEND_ACCESS_KEY }}\" \\\n-backend-config=\"storage_account_name=${{\
+        \ secrets.TF_BACKEND_SA }}\"\n"
+      working-directory: terraform/aks/setup
+    - env: {TF_BACKEND_KEY: 'githubdeployment.${{ github.event.inputs.environment
+          }}.aks_setup.terraform.tfstate'}
+      if: github.event.inputs.force != 'true'
+      name: TF Destroy Setup
+      run: "terraform destroy -auto-approve \\\n  -var=\"environment=${{ github.event.inputs.environment\
+        \ }}\" \n"
+      working-directory: terraform/aks/setup
+    - env: {TF_BACKEND_KEY: 'githubdeployment.${{ github.event.inputs.environment
+          }}.aks_setup.terraform.tfstate'}
+      if: github.event.inputs.force == 'true'
+      name: Force Destroy Setup
+      run: "terraform destroy -auto-approve \\\n  -lock=false \\\n  -var=\"environment=${{\
+        \ github.event.inputs.environment }}\" \n"
+      working-directory: terraform/aks/setup
+name: Destroy Azure Kubernetes Service
+on:
+  workflow_dispatch:
+    inputs:
+      environment: {description: Name of the deployment environment, required: true}
+      force: {description: Dangerous. Enter "true" here ONLY if an error has locked
+          the state}

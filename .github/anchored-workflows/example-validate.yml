@@ -1,0 +1,22 @@
+name: "Validate AKS Setup Terraform"
+
+on:
+  pull_request:
+    paths:
+      - ".github/anchors.yml"
+      - ".github/workflows/aks-setup-validate.yml"
+      - "terraform/aks/setup/*"
+      - "terraform/modules/aks/setup/*"
+
+jobs:
+  validate:
+    name: "Validate Terraform"
+    runs-on: ubuntu-latest
+    env:
+      TF_BACKEND_KEY: githubdeployment.dev.aks_setup.terraform.tfstate
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform/aks/setup
+    steps: *validation_steps

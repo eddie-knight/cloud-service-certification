@@ -1,0 +1,21 @@
+name: "Validate GKE Terraform"
+
+on:
+  pull_request:
+    paths:
+      - ".github/anchors.yml"
+      - ".github/workflows/gcp-gke_validate.yml"
+      - "gcm/gke/gke-terraform-scripts/*"
+
+jobs:
+  validate:
+    name: "Validate Terraform"
+    runs-on: ubuntu-latest
+    env:
+      TF_BACKEND_KEY: probrdev.aks_configure.terraform.tfstate
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: gcm/gke/gke-terraform-scripts
+    steps: *validation_steps

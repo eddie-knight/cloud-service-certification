@@ -1,0 +1,37 @@
+jobs:
+  configure:
+    defaults:
+      run: {shell: bash}
+    env: {ARM_CLIENT_ID: '${{ secrets.ARM_CLIENT_ID }}', ARM_CLIENT_SECRET: '${{ secrets.ARM_CLIENT_SECRET
+        }}', ARM_SUBSCRIPTION_ID: '${{ secrets.ARM_SUBSCRIPTION_ID }}', ARM_TENANT_ID: '${{
+        secrets.ARM_TENANT_ID }}', TF_VAR_kube_config_filepath: '${{ github.workspace
+        }}/kubeconfig'}
+    name: Azure Key Vault Deployment
+    runs-on: ubuntu-latest
+    steps:
+    - {if: github.event.inputs.confirm != 'CONFIRM', name: Confirm Understanding of
+        Manual Deletion, run: "echo \"Please confirm you understand that this key\
+        \ vault can not be destroyed by terraform\"\nexit 1\n"}
+    - {name: Clone Repository, uses: actions/checkout@v2}
+    - env: {TF_BACKEND_KEY: 'githubdeployment.${{ github.event.inputs.environment
+          }}.aks_setup.terraform.tfstate'}
+      name: TF Init Key Vault
+      run: "terraform init -lock=false \\\n-backend-config=\"resource_group_name=terraform\"\
+        \ \\\n-backend-config=\"key=${{ env.TF_BACKEND_KEY }}\" \\\n-backend-config=\"\
+        access_key=${{ secrets.TF_BACKEND_ACCESS_KEY }}\" \\\n-backend-config=\"storage_account_name=${{\
+        \ secrets.TF_BACKEND_SA }}\"\n"
+      working-directory: terraform/aks/key_vault
+    - env: {TF_BACKEND_KEY: 'githubdeployment.${{ github.event.inputs.environment
+          }}.aks_setup.terraform.tfstate'}
+      name: TF Apply Key Vault
+      run: "terraform apply -auto-approve \\\n  -var=\"environment=${{ github.event.inputs.environment\
+        \ }}\"\n"
+      working-directory: terraform/aks/key_vault
+name: Deploy Azure Key Vault
+on:
+  workflow_dispatch:
+    inputs:
+      confirm: {description: This key vault must be manually destroyed after it is
+          created. Type "CONFIRM" to acknowledge., required: true}
+      environment: {description: 'Name. Must not contain spaces, hyphens, or underscores.',
+        required: true}

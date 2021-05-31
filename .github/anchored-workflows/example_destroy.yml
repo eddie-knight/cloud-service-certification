@@ -1,0 +1,51 @@
+name: Destroy Azure Kubernetes Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Name of the deployment environment
+        required: true
+      force:
+        description: Dangerous. Enter "true" here ONLY if an error has locked the state
+jobs:
+  configure:
+    name: Destroy AKS Deployment
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      TF_VAR_kube_config_filepath: ${{ github.workspace }}/kubeconfig
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+    steps:
+      - name: Clone Repository
+        uses: actions/checkout@v2
+
+      - name: TF Init Setup
+        run: *tf_init
+        working-directory: terraform/aks/setup
+        env:
+          TF_BACKEND_KEY: *setup_backend_key
+
+      - name: TF Destroy Setup
+        if: github.event.inputs.force != 'true'
+        working-directory: terraform/aks/setup
+        env:
+          TF_BACKEND_KEY: *setup_backend_key
+        run: |
+          terraform destroy -auto-approve \
+            -var="environment=${{ github.event.inputs.environment }}" 
+
+      - name: Force Destroy Setup
+        if: github.event.inputs.force == 'true'
+        working-directory: terraform/aks/setup
+        env:
+          TF_BACKEND_KEY: *setup_backend_key
+        run: |
+          terraform destroy -auto-approve \
+            -lock=false \
+            -var="environment=${{ github.event.inputs.environment }}" 

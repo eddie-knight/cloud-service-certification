@@ -1,0 +1,54 @@
+jobs:
+  configure:
+    defaults:
+      run: {shell: bash}
+    env: {ARM_CLIENT_ID: '${{ secrets.ARM_CLIENT_ID }}', ARM_CLIENT_SECRET: '${{ secrets.ARM_CLIENT_SECRET
+        }}', ARM_SUBSCRIPTION_ID: '${{ secrets.ARM_SUBSCRIPTION_ID }}', ARM_TENANT_ID: '${{
+        secrets.ARM_TENANT_ID }}', TF_VAR_kube_config_filepath: '${{ github.workspace
+        }}/kubeconfig'}
+    name: AKS Deployment
+    runs-on: ubuntu-latest
+    steps:
+    - {name: Clone Repository, uses: actions/checkout@v2}
+    - env: {TF_BACKEND_KEY: 'githubdeployment.${{ github.event.inputs.environment
+          }}.aks_setup.terraform.tfstate'}
+      name: TF Init Setup
+      run: "terraform init -lock=false \\\n-backend-config=\"resource_group_name=terraform\"\
+        \ \\\n-backend-config=\"key=${{ env.TF_BACKEND_KEY }}\" \\\n-backend-config=\"\
+        access_key=${{ secrets.TF_BACKEND_ACCESS_KEY }}\" \\\n-backend-config=\"storage_account_name=${{\
+        \ secrets.TF_BACKEND_SA }}\"\n"
+      working-directory: terraform/aks/setup
+    - env: {TF_BACKEND_KEY: 'githubdeployment.${{ github.event.inputs.environment
+          }}.aks_configure.terraform.tfstate'}
+      name: TF Init Configuration
+      run: "terraform init -lock=false \\\n-backend-config=\"resource_group_name=terraform\"\
+        \ \\\n-backend-config=\"key=${{ env.TF_BACKEND_KEY }}\" \\\n-backend-config=\"\
+        access_key=${{ secrets.TF_BACKEND_ACCESS_KEY }}\" \\\n-backend-config=\"storage_account_name=${{\
+        \ secrets.TF_BACKEND_SA }}\"\n"
+      working-directory: terraform/aks/configure
+    - env: {TF_BACKEND_KEY: 'githubdeployment.${{ github.event.inputs.environment
+          }}.aks_setup.terraform.tfstate'}
+      name: TF Apply Setup
+      run: "terraform apply -auto-approve \\\n  -var=\"environment=${{ github.event.inputs.environment\
+        \ }}\" \\\n  -var=\"demo_acr_rg=${{ github.event.inputs.demo_acr_rg }}\" \\\
+        \n  -var=\"demo_acr=${{ github.event.inputs.demo_acr }}\"\n"
+      working-directory: terraform/aks/setup
+    - env: {TF_BACKEND_KEY: 'githubdeployment.${{ github.event.inputs.environment
+          }}.aks_configure.terraform.tfstate'}
+      name: TF Apply Configuration
+      run: "terraform apply -auto-approve \\\n-var=\"environment=${{ github.event.inputs.environment\
+        \ }}\" \\\n"
+      working-directory: terraform/aks/configure
+    - name: Store kubeconfig as artifact
+      uses: actions/upload-artifact@v2
+      with: {name: kubeconfig, path: '${{ env.TF_VAR_kube_config_filepath }}'}
+name: Deploy Azure Kubernetes Service
+on:
+  workflow_dispatch:
+    inputs:
+      demo_acr: {default: citihubprod, description: Name of the Azure Container Registry,
+        required: true}
+      demo_acr_rg: {default: citihubprod-aks-rg, description: Name of the Azure Container
+          Registry resource group, required: true}
+      environment: {description: 'Name. Must not contain spaces, hyphens, or underscores.',
+        required: true}
